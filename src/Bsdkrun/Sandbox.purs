@@ -4,7 +4,7 @@ import Prelude
 import Bsdkrun.Exec as Exec
 import Effect.Aff (Aff)
 import Bsdkrun.Internal (Async, toAff)
-import Bsdkrun.Types (Sandbox, CreateOptions, ExecOptions, CommandResult, SandboxInfo)
+import Bsdkrun.Types (Sandbox, CreateOptions, ExecOptions, CommandResult, SandboxInfo, Bytes)
 import Data.Maybe (Maybe)
 import Data.Nullable (Nullable, toMaybe)
 import Effect (Effect)
@@ -52,6 +52,21 @@ followLogs boot box = toAff (followLogsImpl boot box)
 
 foreign import followLogsImpl :: Boolean -> Sandbox -> Async Int
 
+-- | Stream the machine's console to the current terminal until the `Aff` is
+-- | cancelled: what it writes from now on, or everything so far as well with
+-- | `true`. Unlike `followLogs`, nothing older is replayed, so a restart
+-- | shows its own boot rather than the previous one. Start it before
+-- | `start` to catch the boot from its first line.
+streamConsole :: Boolean -> Sandbox -> Aff Unit
+streamConsole = streamConsoleWith writeStdout
+
+-- | `streamConsole` into a writer instead of the terminal.
+streamConsoleWith :: (Bytes -> Effect Unit) -> Boolean -> Sandbox -> Aff Unit
+streamConsoleWith write fromStart box = toAff (streamConsoleWithImpl write fromStart box)
+
+foreign import streamConsoleWithImpl :: (Bytes -> Effect Unit) -> Boolean -> Sandbox -> Async Unit
+foreign import writeStdout :: Bytes -> Effect Unit
+
 -- | Attach an interactive shell (`bsdkrun shell`) to the machine on the
 -- | current terminal; yields its exit status when the session ends.
 shell :: Sandbox -> Aff Int
@@ -65,6 +80,14 @@ execInteractive :: Array String -> Sandbox -> Aff Int
 execInteractive command box = toAff (execInteractiveImpl command box)
 
 foreign import execInteractiveImpl :: Array String -> Sandbox -> Async Int
+
+-- | Run a command in the guest with the current process's stdin, stdout and
+-- | stderr bound to it (`bsdkrun exec`), with a PTY when `tty`; yields its
+-- | exit status. `execInteractive` is `execAttached true`.
+execAttached :: Boolean -> Array String -> Sandbox -> Aff Int
+execAttached tty command box = toAff (execAttachedImpl tty command box)
+
+foreign import execAttachedImpl :: Boolean -> Array String -> Sandbox -> Async Int
 
 stop :: Sandbox -> Aff (Sandbox)
 stop box = toAff (stopImpl box)

@@ -4,6 +4,7 @@
 -- | port up to the next free one before booting.
 module Bsdkrun.Port
   ( isFree
+  , isFreeOn
   , findFree
   , resolve
   , hostPorts
@@ -18,6 +19,15 @@ isFree :: Int -> Aff Boolean
 isFree port = toAff (isFreeImpl port)
 
 foreign import isFreeImpl :: Int -> Async Boolean
+
+-- | `isFree` for a forward bound to one address (`"127.0.0.1"`): free when
+-- | that address can be bound. A wildcard listener elsewhere does not count,
+-- | since the forward wins for its own address; a wildcard bind
+-- | (`"0.0.0.0"`) also needs loopback to refuse connections.
+isFreeOn :: String -> Int -> Aff Boolean
+isFreeOn bind port = toAff (isFreeOnImpl bind port)
+
+foreign import isFreeOnImpl :: String -> Int -> Async Boolean
 
 -- | The first free port at or above the given one, incrementing until one is
 -- | found; fails past 65535.

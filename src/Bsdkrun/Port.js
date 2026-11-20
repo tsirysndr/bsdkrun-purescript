@@ -3,15 +3,19 @@ import { createServer, connect } from "node:net";
 
 const MAX_PORT = 65535;
 
-// A port is free when nothing listens on it. Binding the wildcard address
-// must succeed; since BSD's SO_REUSEADDR (which Node always sets) lets a
-// wildcard bind coexist with a specific-address listener, loopback must
-// also refuse connections.
-const canListen = port => new Promise(resolve => {
+// A port is free on an address when a listener can bind it. For a wildcard
+// bind that is not enough: BSD's SO_REUSEADDR (which Node always sets) lets
+// it coexist with a loopback listener that would then take the loopback
+// traffic, so loopback must also refuse connections. A specific address is
+// only asked to bind: a wildcard listener elsewhere (Docker's dual-stack
+// `*:port`, say) does not stop a 127.0.0.1 forward, which wins for its
+// address.
+const WILDCARDS = new Set(["0.0.0.0", "::", ""]);
+const canListen = (bind, port) => new Promise(resolve => {
   const server = createServer();
   server.unref();
   server.once("error", () => resolve(false));
-  server.listen({ host: "0.0.0.0", port, exclusive: true }, () => server.close(() => resolve(true)));
+  server.listen({ host: bind, port, exclusive: true }, () => server.close(() => resolve(true)));
 });
 const refusesConnections = port => new Promise(resolve => {
   const socket = connect({ host: "127.0.0.1", port });
@@ -21,8 +25,9 @@ const refusesConnections = port => new Promise(resolve => {
   socket.once("timeout", () => { socket.destroy(); resolve(true); });
   socket.once("error", () => resolve(true));
 });
-const isFree = async port => Number.isInteger(port) && port > 0 && port <= MAX_PORT
-  && (await canListen(port)) && (await refusesConnections(port));
+const isFreeOn = async (bind, port) => Number.isInteger(port) && port > 0 && port <= MAX_PORT
+  && (await canListen(bind, port)) && (!WILDCARDS.has(bind) || await refusesConnections(port));
+const isFree = port => isFreeOn("0.0.0.0", port);
 
 // Walk upwards from `start` until a port is free and not in `taken`.
 const findFree = async (start, taken = new Set()) => {
@@ -33,6 +38,7 @@ const findFree = async (start, taken = new Set()) => {
 };
 
 export const isFreeImpl = port => async(signal => isFree(port));
+export const isFreeOnImpl = bind => port => async(signal => isFreeOn(bind, port));
 export const findFreeImpl = port => async(signal => findFree(port));
 
 // A forward is `HOST:GUEST`, optionally prefixed by a bind address, or a

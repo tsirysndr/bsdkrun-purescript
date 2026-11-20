@@ -15,6 +15,7 @@ package:
     main: Test.Main
     dependencies:
       - console
+      - datetime
 workspace:
   packageSet:
     registry: 77.0.0

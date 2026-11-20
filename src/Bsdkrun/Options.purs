@@ -45,4 +45,8 @@ foreign import withNoNet :: Boolean -> CreateOptions -> CreateOptions
 -- | `VOL` mounts its `main` branch at `/mnt/VOL`; `VOL@BRANCH:/path` picks a
 -- | branch and a mountpoint. See `Bsdkrun.Zfs`.
 foreign import withZfs :: Array String -> CreateOptions -> CreateOptions
+-- | Grow the FreeBSD or NetBSD root disk to this size before boot (only
+-- | enlarges), e.g. `"8G"`; the guest expands its root file system on first
+-- | boot. Other guests ignore it.
+foreign import withDiskSize :: String -> CreateOptions -> CreateOptions
 foreign import buildCreateArgs :: CreateOptions -> Array String

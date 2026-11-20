@@ -38,15 +38,21 @@ export const withPorts = value => opts => ({ ...opts, net: { ...opts.net, ports:
 export const withMac = value => opts => ({ ...opts, net: { ...opts.net, mac: value } });
 export const withNoNet = value => opts => ({ ...opts, net: { ...opts.net, disabled: value } });
 export const withZfs = value => opts => ({ ...opts, zfs: value });
+export const withDiskSize = value => opts => ({ ...opts, diskSize: value });
 
-// `@bsdkrun/sdk`'s builder predates `--zfs`; splice the flags in ahead of a
-// trailing `-- CMD...` so they stay bsdkrun options rather than guest argv.
+// `@bsdkrun/sdk`'s builder predates `--zfs` and `--disk-size`; splice the
+// flags in ahead of a trailing `-- CMD...` so they stay bsdkrun options
+// rather than guest argv.
 const ZFS_GUESTS = new Set(["linux", "freebsd", "netbsd"]);
+const DISK_SIZE_GUESTS = new Set(["freebsd", "netbsd"]);
+export const extraCreateFlags = opts => [
+  ...(ZFS_GUESTS.has(opts.os) ? (opts.zfs ?? []).flatMap(v => ["--zfs", v]) : []),
+  ...(DISK_SIZE_GUESTS.has(opts.os) && opts.diskSize !== undefined ? ["--disk-size", opts.diskSize] : []),
+];
 export const buildCreateArgs = opts => {
   const args = build(opts);
-  const zfs = opts.zfs ?? [];
-  if (zfs.length === 0 || !ZFS_GUESTS.has(opts.os)) return args;
-  const flags = zfs.flatMap(v => ["--zfs", v]);
+  const flags = extraCreateFlags(opts);
+  if (flags.length === 0) return args;
   const cut = args.indexOf("--");
   return cut === -1 ? [...args, ...flags] : [...args.slice(0, cut), ...flags, ...args.slice(cut)];
 };

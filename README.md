@@ -120,7 +120,8 @@ Import `Foreign.Object as Object` for environment maps. Other setters cover
 network/MAC/ports, extra disks, kernel/version/format/initramfs, console,
 command line, Solo5 blocks/arguments, OSv GIC, and log level. Linux's boolean
 `--initramfs` uses `withLinuxInitramfs`; other guests' initramfs paths use
-`withInitramfs`.
+`withInitramfs`. `withDiskSize "8G"` grows a FreeBSD or NetBSD root disk
+before its first boot, for guests that install large packages.
 
 ## Exec and streaming
 
@@ -161,12 +162,12 @@ but may continue in the runtime.
 | Module | Operations |
 | --- | --- |
 | `Bsdkrun` | `create`, `get`, `list all`, `sandboxId`, `status`, `isRunning`, `logs boot`, `followLogs boot`, `shell`, `execInteractive cmd`, `stop`, `start`, `remove force`, `update cpus mem`, `connectNetwork`, `disconnectNetwork` |
-| `Bsdkrun.Sandbox` | Also `sshSetup`, `sshAddKey`, `sshStatus`, `tailscaleUp`, `tailscaleStatus` |
+| `Bsdkrun.Sandbox` | Also `streamConsole fromStart`, `execAttached tty cmd`, `sshSetup`, `sshAddKey`, `sshStatus`, `tailscaleUp`, `tailscaleStatus` |
 | `Bsdkrun.Zfs` | `list`, `branches vol`, `create name size`, `branch vol name from`, `attach target machine`, `attachAt target machine mount`, `detach target machine`, `destroy targets force`, `target vol branch` |
 | `Bsdkrun.FileSystem` | `writeText path text`, `writeFile path bytes`, `readText path`, `readFile path`, `upload local remote`, `download remote local recursive` (sandbox last) |
 | `Bsdkrun.Cache` | `save path options box`, `restore options box`, `list`, `remove keys all` |
 | `Bsdkrun.Host` | `images`, `volumes`, `removeVolumes`, `networks`, `createNetwork`, `removeNetworks`, `syncNetwork`, `networkMembers`, `probe`, `version`, `versions`, `fetchImage`, `growDisk` |
-| `Bsdkrun.Port` | `isFree port`, `findFree port`, `resolve options`, `hostPorts options` |
+| `Bsdkrun.Port` | `isFree port`, `isFreeOn bind port`, `findFree port`, `resolve options`, `hostPorts options` |
 
 `B.status` returns `Maybe SandboxInfo`. Nullable fields in info records use
 `Data.Nullable`; convert them with `toMaybe`. `B.list true` includes stopped
@@ -193,9 +194,11 @@ Import `Bsdkrun.FileSystem as FS`, `Bsdkrun.Cache as Cache`, and
 Compression values are `gzip`, `zstd`, `estargz`, and `none`. Files are byte-exact;
 upload detects local directories, while download takes an explicit recursive flag.
 
-`followLogs`, `shell`, and `execInteractive` hand the current terminal to a
-`bsdkrun` child (`logs -f`, `shell`, `exec -t`) and yield its exit status once
-the session ends; cancelling the `Aff` kills it.
+`followLogs`, `shell`, `execAttached`, and `execInteractive` hand the current
+terminal to a `bsdkrun` child (`logs -f`, `shell`, `exec`, `exec -t`) and yield its exit status once
+the session ends; cancelling the `Aff` kills it. `streamConsole false` prints
+the console from now on without replaying earlier boots, until cancelled;
+fork it before `start` to show a reboot from its first line.
 
 ## Free host ports
 

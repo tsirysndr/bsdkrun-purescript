@@ -13,7 +13,7 @@ import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Nullable (null, toMaybe)
 import Effect (Effect)
-import Effect.Aff (Aff, attempt, bracket, launchAff_, throwError)
+import Effect.Aff (Aff, attempt, bracket, delay, forkAff, killFiber, launchAff_, throwError)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
 import Effect.Exception (error)
@@ -22,11 +22,13 @@ import Bsdkrun.FileSystem as FS
 import Bsdkrun.Host as Host
 import Bsdkrun.Internal (Async, toAff)
 import Bsdkrun.Port as Port
+import Bsdkrun.Sandbox as Sandbox
+import Data.Time.Duration (Milliseconds(..))
 import Bsdkrun.Zfs as Zfs
 import Data.Array as Array
 
-foreign import setup :: Effect { args :: Effect (Array String), cleanup :: Effect Unit }
-foreign import occupyPortImpl :: Async { port :: Int, close :: Effect Unit }
+foreign import setup :: Effect { args :: Effect (Array String), console :: String -> Effect Unit, cleanup :: Effect Unit }
+foreign import occupyPortImpl :: String -> Async { port :: Int, close :: Effect Unit }
 foreign import makeSink :: Effect { write :: Bytes -> Effect Unit, read :: Effect Bytes }
 foreign import mockDaemon :: Effect { input :: Effect String, linuxInput :: Effect { image :: String, name :: String, network :: String, noNet :: Boolean, env :: Array String, valid :: Boolean }, cleanup :: Effect Unit }
 
@@ -62,8 +64,13 @@ main = launchAff_ do
     )
   assert "zfs flags on BSD" ((Options.freebsd # Options.withZfs [ "data", "data@dev:/srv" ] # Options.buildCreateArgs) == [ "freebsd", "-d", "--zfs", "data", "--zfs", "data@dev:/srv" ])
   assert "zfs ignored where unsupported" (Options.buildCreateArgs (Options.nanos "disk" # Options.withZfs [ "data" ]) == [ "nanos", "-d", "disk" ])
+  assert "disk size grows BSD root disks" ((Options.freebsd # Options.withZfs [ "data" ] # Options.withDiskSize "8G" # Options.buildCreateArgs) == [ "freebsd", "-d", "--zfs", "data", "--disk-size", "8G" ])
+  assert "disk size ignored on Linux" ((Options.linux "alpine" # Options.withDiskSize "8G" # Options.buildCreateArgs) == [ "linux", "alpine", "-d" ])
   assert "zfs target" (Zfs.target "data" Nothing == "data" && Zfs.target "data" (Just "dev") == "data@dev")
-  bracket (toAff occupyPortImpl) (liftEffect <<< _.close) \held -> do
+  bracket (toAff (occupyPortImpl "127.0.0.1")) (liftEffect <<< _.close) \held -> do
+    loopbackBusy <- Port.isFreeOn "127.0.0.1" held.port
+    assert "a port taken on an address is not free there" (not loopbackBusy)
+  bracket (toAff (occupyPortImpl "0.0.0.0")) (liftEffect <<< _.close) \held -> do
     busy <- Port.isFree held.port
     assert "taken port detected" (not busy)
     next <- Port.findFree held.port
@@ -132,6 +139,24 @@ main = launchAff_ do
     assert "zfs attach argv" (aargs == [ "zfs", "attach", "data@feature", "abcdef123456", "--mount", "/srv" ])
     v <- Host.version
     assert "cli version" (v == "bsdkrun 0.0.0-test")
+    attachedCode <- box # Sandbox.execAttached false [ "node", "-e", "process.exit(3)" ]
+    attachedArgs <- liftEffect fake.args
+    assert "attached exec binds the terminal and yields the status" (attachedCode == 3 && attachedArgs == [ "exec", "abcdef123456", "node", "-e", "process.exit(3)" ])
+    ttyCode <- box # Sandbox.execAttached true [ "node", "-e", "process.exit(0)" ]
+    ttyArgs <- liftEffect fake.args
+    assert "attached exec asks for a PTY with tty" (ttyCode == 0 && ttyArgs == [ "exec", "-t", "abcdef123456", "node", "-e", "process.exit(0)" ])
+    liftEffect (fake.console "old boot\n")
+    console <- liftEffect makeSink
+    follower <- forkAff (Sandbox.streamConsoleWith console.write false box)
+    delay (Milliseconds 300.0)
+    liftEffect (fake.console "new boot\n")
+    let
+      settle n = do
+        got <- liftEffect console.read
+        if Exec.decodeUtf8 got /= "" || n == 0 then pure got else delay (Milliseconds 100.0) *> settle (n - 1)
+    streamed <- settle 50
+    killFiber (error "done") follower
+    assert "console streams new output without replaying the old" (Exec.decodeUtf8 streamed == "new boot\n")
   bracket (liftEffect mockDaemon) (liftEffect <<< _.cleanup) \daemon -> do
     client <- Client.connect "http://example.test" "secret"
     _ <- client # Client.list false

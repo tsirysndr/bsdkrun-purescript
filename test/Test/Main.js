@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, appendFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:net";
@@ -18,9 +18,9 @@ const args=process.argv.slice(4);
 writeFileSync(${JSON.stringify(join(dir, 'args'))}, JSON.stringify(args));
 const op=args.shift();
 if (op==='linux') console.log('abcdef123456');
-else if(op==='ps') console.log(JSON.stringify([{id:'abcdef123456',name:'test',kind:'linux',running:true,ports:[],cpus:1,mem:512}]));
+else if(op==='ps') console.log(JSON.stringify([{id:'abcdef123456',name:'test',kind:'linux',running:true,ports:[],cpus:1,mem:512,state_dir:${JSON.stringify(dir)}}]));
 else if(op==='exec') {
-  while(args[0]==='-e') args.splice(0,2);
+  while(args[0]==='-e'||args[0]==='-t') args.splice(0,args[0]==='-e'?2:1);
   args.shift();
   const child=spawn(args.shift(),args,{stdio:'inherit'});
   child.on('error',e=>{console.error(e.message);process.exitCode=127;});
@@ -35,6 +35,7 @@ else if(op==='--version') console.log('bsdkrun 0.0.0-test');
   setBinaryPath(bin);
   return {
     args: () => JSON.parse(readFileSync(join(dir, "args"), "utf8")),
+    console: text => () => { appendFileSync(join(dir, "console.log"), text); },
     cleanup: () => {
       rmSync(dir, {recursive: true, force: true});
       if(previous === undefined) delete process.env.BSDKRUN_NO_AUTO_INSTALL;
@@ -45,10 +46,10 @@ else if(op==='--version') console.log('bsdkrun 0.0.0-test');
   };
 };
 // Hold a random free port open so port probes have something to collide with.
-export const occupyPortImpl = async(signal => new Promise((resolve, reject) => {
+export const occupyPortImpl = host => async(signal => new Promise((resolve, reject) => {
   const server = createServer();
   server.once("error", reject);
-  server.listen({ host: "0.0.0.0", port: 0 }, () => resolve({ port: server.address().port, close: () => server.close() }));
+  server.listen({ host, port: 0 }, () => resolve({ port: server.address().port, close: () => server.close() }));
 }));
 export const makeSink = () => {
   const chunks = [];

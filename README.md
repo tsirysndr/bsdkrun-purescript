@@ -167,6 +167,7 @@ but may continue in the runtime.
 | `Bsdkrun.FileSystem` | `writeText path text`, `writeFile path bytes`, `readText path`, `readFile path`, `upload local remote`, `download remote local recursive` (sandbox last) |
 | `Bsdkrun.Cache` | `save path options box`, `restore options box`, `list`, `remove keys all` |
 | `Bsdkrun.Host` | `images`, `volumes`, `removeVolumes`, `networks`, `createNetwork`, `removeNetworks`, `syncNetwork`, `networkMembers`, `probe`, `version`, `versions`, `fetchImage`, `growDisk` |
+| `Bsdkrun.Docker` | `status`, `start {cpus, mem, publishBind}`, `stop`, `containers all`, `docker args`, `dockerAttached args`, `machineName` |
 | `Bsdkrun.Port` | `isFree port`, `isFreeOn bind port`, `findFree port`, `resolve options`, `hostPorts options` |
 
 `B.status` returns `Maybe SandboxInfo`. Nullable fields in info records use
@@ -199,6 +200,29 @@ terminal to a `bsdkrun` child (`logs -f`, `shell`, `exec`, `exec -t`) and yield 
 the session ends; cancelling the `Aff` kills it. `streamConsole false` prints
 the console from now on without replaying earlier boots, until cancelled;
 fork it before `start` to show a reboot from its first line.
+
+## The shared Docker engine
+
+`bsdkrun docker` runs one Docker engine microVM, `bsdkrun-docker`, and serves
+its API on a host socket. `Bsdkrun.Docker` starts and inspects it and runs the
+host's own `docker` CLI against it, so several services can share one VM as
+containers while each keeps its data on a ZFS branch attached to the engine:
+
+```purescript
+import Bsdkrun.Docker as Docker
+
+engine <- Docker.status
+when (not engine.running) $ void (Docker.start { cpus: 2, mem: 2048, publishBind: Just "127.0.0.1" })
+_ <- Zfs.attachAt "data@main" Docker.machineName (Just "/mnt/data")   -- stopped engine, or a branch of a held volume
+r <- Docker.docker [ "run", "-d", "--name", "db", "-p", "5432:5432", "-v", "/mnt/data:/var/lib/postgresql", "postgres:18" ]
+code <- Docker.dockerAttached [ "exec", "-it", "db", "psql", "-U", "postgres" ]
+```
+
+A volume new to the engine attaches while it is stopped (a virtio disk cannot
+be hot-plugged); another branch of a volume it already holds mounts live.
+Publish container ports on every interface of the VM (`-p 5432:5432`): a port
+bound to the VM's loopback is out of gvproxy's reach. Where they land on the
+host is the engine's `publishBind`.
 
 ## Free host ports
 

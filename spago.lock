@@ -40,7 +40,8 @@
         "test": {
           "dependencies": [
             "console",
-            "datetime"
+            "datetime",
+            "strings"
           ]
         }
       }

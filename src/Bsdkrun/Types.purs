@@ -58,3 +58,26 @@ type ZfsVolumeInfo =
   , attachedTo :: Array ZfsAttachmentInfo
   , createdAt :: Nullable Number
   }
+
+-- | `bsdkrun docker status --json`: `running` means the VM is up and dockerd
+-- | answered; `machineId` is null until the engine VM has been created.
+type DockerStatus =
+  { running :: Boolean
+  , machineId :: Nullable String
+  , machineRunning :: Boolean
+  , socket :: String
+  , socketReady :: Boolean
+  , apiPort :: Nullable Int
+  , version :: Nullable String
+  , containers :: Nullable Int
+  , images :: Nullable Int
+  , mounts :: Array String
+  , context :: Boolean
+  , contextActive :: Boolean
+  , systemSocket :: Boolean
+  , disk :: Nullable String
+  , diskSize :: Nullable Number
+  }
+-- | A container as `bsdkrun docker ps --json` reports it; `ports` are the
+-- | published forwards bsdkrun mirrors onto the host, each `HOST:GUEST/proto`.
+type DockerContainer = { id :: String, name :: String, image :: String, command :: String, state :: String, status :: String, ports :: Array String, created :: Number }

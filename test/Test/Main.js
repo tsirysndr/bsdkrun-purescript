@@ -31,7 +31,19 @@ else if(op==='exec') {
 } else if(op==='cache') console.log(JSON.stringify({restored:false,requested_key:'miss'}));
 else if(op==='zfs') console.log(args[0]==='ls'?JSON.stringify([{name:'data',path:'/x/data.img',size_bytes:1,branches:[{name:'main',origin:null,created_at:1}],attached_to:[{machine:'abcdef123456',machine_name:'test',running:true,mounts:[{branch:'main',mountpoint:'/mnt/data'}]}]}]):'data@'+args[2]);
 else if(op==='--version') console.log('bsdkrun 0.0.0-test');
+else if(op==='docker') {
+  if(args[0]==='start') console.log('booting the engine ...');
+  if(args[0]==='status'||args[0]==='start') console.log(JSON.stringify({running:args[0]==='start',machine_id:'eeeeeeeeeeee',machine_running:true,socket:${JSON.stringify(join(dir, 'docker.sock'))},socket_ready:true,api_port:2375,proxy_pid:1,version:'28.0',containers:1,images:2,mounts:[],context:true,context_active:false,system_socket:false,disk:null,disk_size:null}));
+  else if(args[0]==='ps') console.log(JSON.stringify([{id:'c0ffee',name:'db',image:'postgres:18',command:'postgres',state:'running',status:'Up 1 minute',ports:['127.0.0.1:5432:5432/tcp'],created:1}]));
+}
 `, {mode: 0o755});
+  const docker = join(dir, "docker");
+  writeFileSync(docker, `#!/usr/bin/env node
+process.stdout.write(JSON.stringify({args:process.argv.slice(2),host:process.env.DOCKER_HOST}));
+process.exitCode = process.argv.includes('fail') ? 5 : 0;
+`, {mode: 0o755});
+  const previousPath = process.env.PATH;
+  process.env.PATH = dir + ":" + previousPath;
   setBinaryPath(bin);
   return {
     args: () => JSON.parse(readFileSync(join(dir, "args"), "utf8")),
@@ -40,6 +52,7 @@ else if(op==='--version') console.log('bsdkrun 0.0.0-test');
       rmSync(dir, {recursive: true, force: true});
       if(previous === undefined) delete process.env.BSDKRUN_NO_AUTO_INSTALL;
       else process.env.BSDKRUN_NO_AUTO_INSTALL = previous;
+      process.env.PATH = previousPath;
       setBinaryPath(undefined);
       resetPreflight();
     },

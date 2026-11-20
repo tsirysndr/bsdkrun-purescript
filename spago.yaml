@@ -16,6 +16,7 @@ package:
     dependencies:
       - console
       - datetime
+      - strings
 workspace:
   packageSet:
     registry: 77.0.0

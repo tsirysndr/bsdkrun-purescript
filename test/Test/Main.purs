@@ -21,11 +21,13 @@ import Foreign.Object as Object
 import Bsdkrun.FileSystem as FS
 import Bsdkrun.Host as Host
 import Bsdkrun.Internal (Async, toAff)
+import Bsdkrun.Docker as Docker
 import Bsdkrun.Port as Port
 import Bsdkrun.Sandbox as Sandbox
 import Data.Time.Duration (Milliseconds(..))
 import Bsdkrun.Zfs as Zfs
 import Data.Array as Array
+import Data.String as String
 
 foreign import setup :: Effect { args :: Effect (Array String), console :: String -> Effect Unit, cleanup :: Effect Unit }
 foreign import occupyPortImpl :: String -> Async { port :: Int, close :: Effect Unit }
@@ -139,6 +141,19 @@ main = launchAff_ do
     assert "zfs attach argv" (aargs == [ "zfs", "attach", "data@feature", "abcdef123456", "--mount", "/srv" ])
     v <- Host.version
     assert "cli version" (v == "bsdkrun 0.0.0-test")
+    engine <- Docker.status
+    assert "docker status decodes" (not engine.running && toMaybe engine.machineId == Just "eeeeeeeeeeee" && engine.machineRunning && toMaybe engine.apiPort == Just 2375)
+    started <- Docker.start { cpus: 2, mem: 2048, publishBind: Just "127.0.0.1" }
+    startArgs <- liftEffect fake.args
+    assert "docker start passes resources and the bind address, and reads the trailing JSON" (started.running && startArgs == [ "docker", "start", "--json", "--cpus", "2", "--mem", "2048", "--publish-bind", "127.0.0.1" ])
+    _ <- Docker.start { cpus: 1, mem: 512, publishBind: Nothing }
+    plainArgs <- liftEffect fake.args
+    assert "docker start leaves the bind to bsdkrun by default" (plainArgs == [ "docker", "start", "--json", "--cpus", "1", "--mem", "512" ])
+    cs <- Docker.containers true
+    psArgs <- liftEffect fake.args
+    assert "docker ps decodes" (map _.name cs == [ "db" ] && psArgs == [ "docker", "ps", "--json", "--all" ])
+    ran <- Docker.docker [ "run", "-d", "fail" ]
+    assert "host docker runs against the engine socket" (ran.exitCode == 5 && String.contains (String.Pattern "\"host\":\"unix://") ran.stdout && String.contains (String.Pattern "docker.sock") ran.stdout && String.contains (String.Pattern "[\"run\",\"-d\",\"fail\"]") ran.stdout)
     attachedCode <- box # Sandbox.execAttached false [ "node", "-e", "process.exit(3)" ]
     attachedArgs <- liftEffect fake.args
     assert "attached exec binds the terminal and yields the status" (attachedCode == 3 && attachedArgs == [ "exec", "abcdef123456", "node", "-e", "process.exit(3)" ])

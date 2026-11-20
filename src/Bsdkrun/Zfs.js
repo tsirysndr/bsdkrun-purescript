@@ -1,0 +1,10 @@
+import { async } from "../Bsdkrun.Internal/foreign.js";
+import * as SDK from "@bsdkrun/sdk";
+const opt = (key, value) => value == null ? {} : { [key]: value };
+export const listImpl = async(signal => SDK.listZfsVolumes());
+export const branchesImpl = volume => async(signal => SDK.zfsBranches(volume));
+export const createImpl = name => size => async(signal => SDK.createZfsVolume(name, opt("size", size)));
+export const branchImpl = volume => name => from => async(signal => SDK.branchZfsVolume(volume, name, opt("from", from)));
+export const attachImpl = target => machine => mount => async(signal => SDK.attachZfsVolume(target, machine, opt("mount", mount)));
+export const detachImpl = target => machine => async(signal => SDK.detachZfsVolume(target, machine));
+export const destroyImpl = targets => force => async(signal => SDK.destroyZfsVolume(targets, { force }));

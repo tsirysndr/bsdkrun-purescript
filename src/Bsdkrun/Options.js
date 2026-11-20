@@ -37,4 +37,16 @@ export const withNetwork = value => opts => ({ ...opts, net: { ...opts.net, netw
 export const withPorts = value => opts => ({ ...opts, net: { ...opts.net, ports: value } });
 export const withMac = value => opts => ({ ...opts, net: { ...opts.net, mac: value } });
 export const withNoNet = value => opts => ({ ...opts, net: { ...opts.net, disabled: value } });
-export const buildCreateArgs = opts => build(opts);
+export const withZfs = value => opts => ({ ...opts, zfs: value });
+
+// `@bsdkrun/sdk`'s builder predates `--zfs`; splice the flags in ahead of a
+// trailing `-- CMD...` so they stay bsdkrun options rather than guest argv.
+const ZFS_GUESTS = new Set(["linux", "freebsd", "netbsd"]);
+export const buildCreateArgs = opts => {
+  const args = build(opts);
+  const zfs = opts.zfs ?? [];
+  if (zfs.length === 0 || !ZFS_GUESTS.has(opts.os)) return args;
+  const flags = zfs.flatMap(v => ["--zfs", v]);
+  const cut = args.indexOf("--");
+  return cut === -1 ? [...args, ...flags] : [...args.slice(0, cut), ...flags, ...args.slice(cut)];
+};

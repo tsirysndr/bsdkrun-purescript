@@ -160,11 +160,12 @@ but may continue in the runtime.
 
 | Module | Operations |
 | --- | --- |
-| `Bsdkrun` | `create`, `get`, `list all`, `sandboxId`, `status`, `isRunning`, `logs boot`, `stop`, `start`, `remove force`, `update cpus mem`, `connectNetwork`, `disconnectNetwork` |
+| `Bsdkrun` | `create`, `get`, `list all`, `sandboxId`, `status`, `isRunning`, `logs boot`, `followLogs boot`, `shell`, `execInteractive cmd`, `stop`, `start`, `remove force`, `update cpus mem`, `connectNetwork`, `disconnectNetwork` |
 | `Bsdkrun.Sandbox` | Also `sshSetup`, `sshAddKey`, `sshStatus`, `tailscaleUp`, `tailscaleStatus` |
+| `Bsdkrun.Zfs` | `list`, `branches vol`, `create name size`, `branch vol name from`, `attach target machine`, `attachAt target machine mount`, `detach target machine`, `destroy targets force`, `target vol branch` |
 | `Bsdkrun.FileSystem` | `writeText path text`, `writeFile path bytes`, `readText path`, `readFile path`, `upload local remote`, `download remote local recursive` (sandbox last) |
 | `Bsdkrun.Cache` | `save path options box`, `restore options box`, `list`, `remove keys all` |
-| `Bsdkrun.Host` | `images`, `volumes`, `removeVolumes`, `networks`, `createNetwork`, `removeNetworks`, `syncNetwork`, `networkMembers`, `probe`, `versions`, `fetchImage`, `growDisk` |
+| `Bsdkrun.Host` | `images`, `volumes`, `removeVolumes`, `networks`, `createNetwork`, `removeNetworks`, `syncNetwork`, `networkMembers`, `probe`, `version`, `versions`, `fetchImage`, `growDisk` |
 
 `B.status` returns `Maybe SandboxInfo`. Nullable fields in info records use
 `Data.Nullable`; convert them with `toMaybe`. `B.list true` includes stopped
@@ -190,6 +191,33 @@ Import `Bsdkrun.FileSystem as FS`, `Bsdkrun.Cache as Cache`, and
 `restored: false`; absent restore metadata is normalized to `Nullable`.
 Compression values are `gzip`, `zstd`, `estargz`, and `none`. Files are byte-exact;
 upload detects local directories, while download takes an explicit recursive flag.
+
+`followLogs`, `shell`, and `execInteractive` hand the current terminal to a
+`bsdkrun` child (`logs -f`, `shell`, `exec -t`) and yield its exit status once
+the session ends; cancelling the `Aff` kills it.
+
+## ZFS volumes and branches
+
+A ZFS volume is one zpool on a sparse image, attached to a Linux, FreeBSD or
+NetBSD machine; its branches are copy-on-write clones inside the pool. Attach
+at boot with `withZfs` (`VOL`, `VOL@BRANCH`, or `VOL@BRANCH:/mount`), and
+manage volumes with `Bsdkrun.Zfs`:
+
+```purescript
+import Bsdkrun.Zfs as Zfs
+
+_ <- Zfs.create "data" (Just "10G")
+box <- Options.linux "postgres"
+  # Options.withZfs [ "data@main:/var/lib/postgresql" ]
+  # B.create
+_ <- Zfs.branch "data" "feature" Nothing          -- from main
+_ <- Zfs.attachAt "data@feature" (B.sandboxId box) (Just "/srv")
+vols <- Zfs.list                                  -- branches + holder per volume
+```
+
+A pool is imported by one machine at a time: attach to a stopped machine and
+`start` it, or attach another branch live to the running holder. `branch` runs
+in the holder, or in a short-lived FreeBSD helper when nothing holds the pool.
 
 ## Remote daemon
 

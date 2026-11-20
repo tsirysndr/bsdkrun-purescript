@@ -27,6 +27,8 @@ else if(op==='exec') {
   if(args[0]==='-') writeFileSync(${JSON.stringify(join(dir, 'payload'))},readFileSync(0));
   else process.stdout.write(readFileSync(${JSON.stringify(join(dir, 'payload'))}));
 } else if(op==='cache') console.log(JSON.stringify({restored:false,requested_key:'miss'}));
+else if(op==='zfs') console.log(args[0]==='ls'?JSON.stringify([{name:'data',path:'/x/data.img',size_bytes:1,branches:[{name:'main',origin:null,created_at:1}],attached_to:[{machine:'abcdef123456',machine_name:'test',running:true,mounts:[{branch:'main',mountpoint:'/mnt/data'}]}]}]):'data@'+args[2]);
+else if(op==='--version') console.log('bsdkrun 0.0.0-test');
 `, {mode: 0o755});
   setBinaryPath(bin);
   return {

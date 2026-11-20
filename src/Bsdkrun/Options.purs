@@ -41,4 +41,8 @@ foreign import withNetwork :: String -> CreateOptions -> CreateOptions
 foreign import withPorts :: Array String -> CreateOptions -> CreateOptions
 foreign import withMac :: String -> CreateOptions -> CreateOptions
 foreign import withNoNet :: Boolean -> CreateOptions -> CreateOptions
+-- | Attach `bsdkrun zfs` volumes at boot (Linux, FreeBSD and NetBSD guests):
+-- | `VOL` mounts its `main` branch at `/mnt/VOL`; `VOL@BRANCH:/path` picks a
+-- | branch and a mountpoint. See `Bsdkrun.Zfs`.
+foreign import withZfs :: Array String -> CreateOptions -> CreateOptions
 foreign import buildCreateArgs :: CreateOptions -> Array String

@@ -45,6 +45,12 @@ networkMembers name = toAff (networkMembersImpl name)
 
 foreign import networkMembersImpl :: String -> Async (Array SandboxInfo)
 
+-- | The CLI's version line (`bsdkrun --version`), e.g. `bsdkrun 0.12.0`.
+version :: Aff String
+version = toAff versionImpl
+
+foreign import versionImpl :: Async String
+
 probe :: Aff (Boolean)
 probe = toAff (probeImpl)
 

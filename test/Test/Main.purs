@@ -19,6 +19,9 @@ import Effect.Console (log)
 import Effect.Exception (error)
 import Foreign.Object as Object
 import Bsdkrun.FileSystem as FS
+import Bsdkrun.Host as Host
+import Bsdkrun.Zfs as Zfs
+import Data.Array as Array
 
 foreign import setup :: Effect { args :: Effect (Array String), cleanup :: Effect Unit }
 foreign import makeSink :: Effect { write :: Bytes -> Effect Unit, read :: Effect Bytes }
@@ -50,6 +53,13 @@ main = launchAff_ do
   assert "Unikraft" (Options.buildCreateArgs (Options.unikraft ".") == [ "unikraft", "-d", "." ])
   assert "Solo5" (Options.buildCreateArgs (Options.solo5 ".") == [ "solo5", "-d", "." ])
   assert "OSv" (Options.buildCreateArgs (Options.osv "loader") == [ "osv", "-d", "loader" ])
+  assert "zfs flags precede the guest command"
+    ( (Options.linux "postgres" # Options.withZfs [ "data@main:/var/lib/postgresql" ] # Options.withCommand [ "postgres" ] # Options.buildCreateArgs) ==
+        [ "linux", "postgres", "-d", "--zfs", "data@main:/var/lib/postgresql", "--", "postgres" ]
+    )
+  assert "zfs flags on BSD" ((Options.freebsd # Options.withZfs [ "data", "data@dev:/srv" ] # Options.buildCreateArgs) == [ "freebsd", "-d", "--zfs", "data", "--zfs", "data@dev:/srv" ])
+  assert "zfs ignored where unsupported" (Options.buildCreateArgs (Options.nanos "disk" # Options.withZfs [ "data" ]) == [ "nanos", "-d", "disk" ])
+  assert "zfs target" (Zfs.target "data" Nothing == "data" && Zfs.target "data" (Just "dev") == "data@dev")
   let prefix = CI.workflow "test" # CI.onPush [ "main" ] # CI.deps [ "nodejs" ]
   let plan = prefix # CI.step "test" "npm test"
   assert "workflow immutable prefix" (CI.yaml prefix /= CI.yaml plan)
@@ -90,6 +100,19 @@ main = launchAff_ do
     assert "byte-exact files" (Exec.toBytes roundtrip == Exec.toBytes bytes)
     hit <- box # Cache.restore { key: "miss", path: null, restoreKeys: [] }
     assert "cache miss succeeds with nullable fields" (not hit.restored && toMaybe hit.key == Nothing)
+    zbox <- (Options.linux "postgres" # Options.withZfs [ "data@main:/var/lib/postgresql" ]) # B.create
+    zargs <- liftEffect fake.args
+    assert "create passes --zfs through the CLI" (zargs == [ "linux", "postgres", "-d", "--zfs", "data@main:/var/lib/postgresql" ] && B.sandboxId zbox == "abcdef123456")
+    vols <- Zfs.list
+    assert "zfs volumes decode" (map _.name vols == [ "data" ] && (Array.concatMap (_.mounts) (Array.concatMap _.attachedTo vols) # map _.mountpoint) == [ "/mnt/data" ])
+    created <- Zfs.branch "data" "feature" (Just "main")
+    bargs <- liftEffect fake.args
+    assert "zfs branch argv" (created == "data@feature" && bargs == [ "zfs", "branch", "data", "feature", "--from", "main" ])
+    _ <- Zfs.attachAt "data@feature" "abcdef123456" (Just "/srv")
+    aargs <- liftEffect fake.args
+    assert "zfs attach argv" (aargs == [ "zfs", "attach", "data@feature", "abcdef123456", "--mount", "/srv" ])
+    v <- Host.version
+    assert "cli version" (v == "bsdkrun 0.0.0-test")
   bracket (liftEffect mockDaemon) (liftEffect <<< _.cleanup) \daemon -> do
     client <- Client.connect "http://example.test" "secret"
     _ <- client # Client.list false

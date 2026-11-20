@@ -39,3 +39,22 @@ type VolumeInfo = { name :: String, guest :: Nullable String, base :: Nullable S
 type NetworkInfo = { name :: String, subnet :: String, gateway :: String, members :: Int, running :: Int, up :: Boolean, createdAt :: Nullable Number }
 type CacheEntry = { key :: String, path :: String, compression :: String, size :: Number, created :: Number, digest :: String }
 type RestoreResult = { restored :: Boolean, requestedKey :: String, key :: Nullable String, path :: Nullable String, size :: Nullable Number, compression :: Nullable String, created :: Nullable Number }
+
+-- | One branch of a ZFS volume mounted in a guest.
+type ZfsMountInfo = { branch :: String, mountpoint :: String }
+-- | A branch of a ZFS volume: a dataset cloned copy-on-write inside its pool.
+-- | `origin` is the branch it was cloned from; `null` for `main`.
+type ZfsBranchInfo = { name :: String, origin :: Nullable String, createdAt :: Nullable Number }
+-- | The machine holding a ZFS volume and what it mounts.
+type ZfsAttachmentInfo = { machine :: String, machineName :: Nullable String, running :: Boolean, mounts :: Array ZfsMountInfo }
+-- | A ZFS volume as reported by `bsdkrun zfs ls --json`. `attachedTo` holds
+-- | the holder, if any; at most one.
+type ZfsVolumeInfo =
+  { name :: String
+  , path :: String
+  , sizeBytes :: Number
+  , size :: Nullable String
+  , branches :: Array ZfsBranchInfo
+  , attachedTo :: Array ZfsAttachmentInfo
+  , createdAt :: Nullable Number
+  }

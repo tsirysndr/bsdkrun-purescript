@@ -44,6 +44,28 @@ logs boot box = toAff (logsImpl boot box)
 
 foreign import logsImpl :: Boolean -> Sandbox -> Async (String)
 
+-- | Follow the live console (`logs -f`, or the boot log with `true`) on the
+-- | current terminal until it ends or the `Aff` is cancelled; yields the exit
+-- | status.
+followLogs :: Boolean -> Sandbox -> Aff Int
+followLogs boot box = toAff (followLogsImpl boot box)
+
+foreign import followLogsImpl :: Boolean -> Sandbox -> Async Int
+
+-- | Attach an interactive shell (`bsdkrun shell`) to the machine on the
+-- | current terminal; yields its exit status when the session ends.
+shell :: Sandbox -> Aff Int
+shell box = toAff (shellImpl box)
+
+foreign import shellImpl :: Sandbox -> Async Int
+
+-- | Run a command in the guest with a PTY on the current terminal
+-- | (`bsdkrun exec -t`), e.g. `["psql"]`; yields its exit status.
+execInteractive :: Array String -> Sandbox -> Aff Int
+execInteractive command box = toAff (execInteractiveImpl command box)
+
+foreign import execInteractiveImpl :: Array String -> Sandbox -> Async Int
+
 stop :: Sandbox -> Aff (Sandbox)
 stop box = toAff (stopImpl box)
 

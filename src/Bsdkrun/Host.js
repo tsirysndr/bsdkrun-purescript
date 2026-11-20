@@ -12,3 +12,4 @@ export const probeImpl = async(signal => SDK.probe());
 export const versionsImpl = os => async(signal => SDK.versions(os));
 export const fetchImageImpl = os => opts => async(signal => SDK.fetchImage(os, opts));
 export const growDiskImpl = disk => size => async(signal => SDK.growDisk(disk, size));
+export const versionImpl = async(signal => SDK.runCli(["--version"]).then(r => (r.stdout || r.stderr).trim()));

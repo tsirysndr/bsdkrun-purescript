@@ -20,10 +20,13 @@ import Effect.Exception (error)
 import Foreign.Object as Object
 import Bsdkrun.FileSystem as FS
 import Bsdkrun.Host as Host
+import Bsdkrun.Internal (Async, toAff)
+import Bsdkrun.Port as Port
 import Bsdkrun.Zfs as Zfs
 import Data.Array as Array
 
 foreign import setup :: Effect { args :: Effect (Array String), cleanup :: Effect Unit }
+foreign import occupyPortImpl :: Async { port :: Int, close :: Effect Unit }
 foreign import makeSink :: Effect { write :: Bytes -> Effect Unit, read :: Effect Bytes }
 foreign import mockDaemon :: Effect { input :: Effect String, linuxInput :: Effect { image :: String, name :: String, network :: String, noNet :: Boolean, env :: Array String, valid :: Boolean }, cleanup :: Effect Unit }
 
@@ -60,6 +63,22 @@ main = launchAff_ do
   assert "zfs flags on BSD" ((Options.freebsd # Options.withZfs [ "data", "data@dev:/srv" ] # Options.buildCreateArgs) == [ "freebsd", "-d", "--zfs", "data", "--zfs", "data@dev:/srv" ])
   assert "zfs ignored where unsupported" (Options.buildCreateArgs (Options.nanos "disk" # Options.withZfs [ "data" ]) == [ "nanos", "-d", "disk" ])
   assert "zfs target" (Zfs.target "data" Nothing == "data" && Zfs.target "data" (Just "dev") == "data@dev")
+  bracket (toAff occupyPortImpl) (liftEffect <<< _.close) \held -> do
+    busy <- Port.isFree held.port
+    assert "taken port detected" (not busy)
+    next <- Port.findFree held.port
+    nextFree <- Port.isFree next
+    assert "findFree increments past the taken port" (next > held.port && nextFree)
+    untouched <- Port.resolve base
+    assert "resolve passes options without forwards through" (Options.buildCreateArgs untouched == Options.buildCreateArgs base)
+    let taken = show held.port
+    resolved <- Port.resolve (base # Options.withPorts [ taken <> ":80", taken <> ":443", "127.0.0.1:" <> taken <> ":22" ])
+    case Port.hostPorts resolved of
+      [ a, b, c ] -> do
+        assert "resolve moves every taken host port upwards" (a > held.port && b > a && c > b)
+        assert "resolve keeps guest ports and bind prefixes"
+          (Options.buildCreateArgs resolved == [ "linux", "alpine", "-d", "--port", show a <> ":80", "--port", show b <> ":443", "--port", "127.0.0.1:" <> show c <> ":22" ])
+      _ -> assert "resolve keeps every forward" false
   let prefix = CI.workflow "test" # CI.onPush [ "main" ] # CI.deps [ "nodejs" ]
   let plan = prefix # CI.step "test" "npm test"
   assert "workflow immutable prefix" (CI.yaml prefix /= CI.yaml plan)

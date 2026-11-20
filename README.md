@@ -166,6 +166,7 @@ but may continue in the runtime.
 | `Bsdkrun.FileSystem` | `writeText path text`, `writeFile path bytes`, `readText path`, `readFile path`, `upload local remote`, `download remote local recursive` (sandbox last) |
 | `Bsdkrun.Cache` | `save path options box`, `restore options box`, `list`, `remove keys all` |
 | `Bsdkrun.Host` | `images`, `volumes`, `removeVolumes`, `networks`, `createNetwork`, `removeNetworks`, `syncNetwork`, `networkMembers`, `probe`, `version`, `versions`, `fetchImage`, `growDisk` |
+| `Bsdkrun.Port` | `isFree port`, `findFree port`, `resolve options`, `hostPorts options` |
 
 `B.status` returns `Maybe SandboxInfo`. Nullable fields in info records use
 `Data.Nullable`; convert them with `toMaybe`. `B.list true` includes stopped
@@ -195,6 +196,27 @@ upload detects local directories, while download takes an explicit recursive fla
 `followLogs`, `shell`, and `execInteractive` hand the current terminal to a
 `bsdkrun` child (`logs -f`, `shell`, `exec -t`) and yield its exit status once
 the session ends; cancelling the `Aff` kills it.
+
+## Free host ports
+
+A forward whose host port is already taken makes `create` fail. `Bsdkrun.Port`
+probes the host first and picks the next free port by incrementing:
+
+```purescript
+import Bsdkrun.Port as Port
+
+free <- Port.isFree 8080                      -- false while something listens
+port <- Port.findFree 8080                    -- 8080, or 8081, 8082, ... when taken
+box <- Options.linux "nginx"
+  # Options.withPorts [ "8080:80", "8443:443" ]
+  # Port.resolve                              -- each taken host port moves up
+  # B.andThen B.create
+```
+
+`resolve` keeps guest ports and any bind prefix, picks distinct host ports for
+the forwards of one machine, and passes options without forwards through.
+Read what was chosen with `Port.hostPorts` before booting, or from `ports` on
+`B.status` afterwards.
 
 ## ZFS volumes and branches
 

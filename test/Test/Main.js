@@ -1,7 +1,9 @@
 import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createServer } from "node:net";
 import { setBinaryPath, resetPreflight } from "@bsdkrun/sdk";
+import { async } from "../Bsdkrun.Internal/foreign.js";
 
 export const setup = () => {
   const dir = mkdtempSync(join(tmpdir(), "bsdkrun-purs-test-"));
@@ -42,6 +44,12 @@ else if(op==='--version') console.log('bsdkrun 0.0.0-test');
     },
   };
 };
+// Hold a random free port open so port probes have something to collide with.
+export const occupyPortImpl = async(signal => new Promise((resolve, reject) => {
+  const server = createServer();
+  server.once("error", reject);
+  server.listen({ host: "0.0.0.0", port: 0 }, () => resolve({ port: server.address().port, close: () => server.close() }));
+}));
 export const makeSink = () => {
   const chunks = [];
   return {

@@ -10,7 +10,7 @@
     "test": "spago test"
   },
   "dependencies": {
-    "@bsdkrun/sdk": "^0.7.0"
+    "@bsdkrun/sdk": "^0.8.0"
   },
   "devDependencies": {
     "purescript": "^0.15.16",
